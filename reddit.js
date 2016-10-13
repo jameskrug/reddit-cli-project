@@ -39,11 +39,48 @@ function getHomepage(callback) {
   });
 }
 
+
+function sortByWhat(callback){
+  var sortMethods = [
+    {name: 'HOT', value: 'hot'},
+    {name: 'NEW', value: 'new'},
+    {name: 'RISING', value: 'rising'},
+    {name: "CONTROVERSIAL", value: "controversial"},
+    {name: "TOP", value: "top"}
+  ];
+
+  inquirer.prompt({
+    type : "list",
+    name : "sortBy",
+    message: "How Would You Like to Sort?",
+    choices : sortMethods
+  }).then(function(answer){
+    callback(answer.sortBy);
+  });
+
+}
 /*
 This function should "return" the default homepage posts as an array of objects.
 In contrast to the `getHomepage` function, this one accepts a `sortingMethod` parameter.
 */
 function getSortedHomepage(sortingMethod, callback) {
+  sortByWhat(function(x){
+    // console.log(x);
+    requestAsJson('https://reddit.com/'+x+'/.json', function(err, data) {
+      // console.log(data.data.children);
+      if (err) {
+        console.log("error:",err);
+      }
+      else {
+        try {
+          displayPage(data.data.children);
+        }
+        catch(e) {
+          console.log("issues:",e);
+        }
+      }
+    });
+  });
   // Load reddit.com/{sortingMethod}.json and call back with the array of posts
   // Check if the sorting method is valid based on the various Reddit sorting methods
 }
@@ -71,6 +108,25 @@ This function should "return" the posts on the front page of a subreddit as an a
 In contrast to the `getSubreddit` function, this one accepts a `sortingMethod` parameter.
 */
 function getSortedSubreddit(subreddit, sortingMethod, callback) {
+  sortByWhat(function(x){
+    whichSubreddit(function(subreddit){
+    // console.log(x);
+      requestAsJson('https://reddit.com/r/'+subreddit+"/"+x+'/.json', function(err, data) {
+        // console.log('https://reddit.com/r/'+subreddit+"/"+x+'/.json');
+        if (err) {
+          console.log("error:",err);
+        }
+        else {
+          try {
+            displayPage(data.data.children);
+          }
+          catch(e) {
+            console.log("issues:",e);
+          }
+        }
+      });
+    });
+  });
   // Load reddit.com/r/{subreddit}/{sortingMethod}.json and call back with the array of posts
   // Check if the sorting method is valid based on the various Reddit sorting methods
 }
@@ -92,22 +148,31 @@ function getSubreddits(callback) {
   });
 }
 
-function displayThisSubreddit(){
-  console.log("in the function");
+
+function whichSubreddit(callback){
   inquirer.prompt({
     type:"input",
     name:"answer",
     message: "Which subreddit would you like?"
-    }).then(function(answer){
-      getSubreddit(answer.answer, function(err, data){
-        if (err){
-          console.log("finding problems");
-        }
-        else{
-          displayPage(data);
-        }
-      });
+    }).then(
+    function(answer){
+      callback(answer.answer);
+    });
+}
+
+
+function displayThisSubreddit(){
+  whichSubreddit(function(x){
+    requestAsJson("https://www.reddit.com/r/"+x+"/.json", function(err,data){
+      if (err){
+        console.log("not working....bitch",err);
+      }
+      else{
+        displayPage(data.data.children);
+      }
+    });
   });
+  // getSubreddit(answer.answer, function(err, data)
 }
 
 function displayPage(data){
@@ -217,7 +282,9 @@ function dispalySubbredditList(){
 function startMenu(){
   var menuChoices = [
     {name: 'Show homepage', value: 'HOMEPAGE'},
+    {name: "Show sorted homepage", value : "SORTHOMEPAGE"},
     {name: 'Show subreddit', value: 'SUBREDDIT'},
+    {name: "Show sorted subreddit", value: "SORTSUBREDDIT"},
     {name: 'List subreddits', value: 'SUBREDDITS'},
     {name: "Exit", value: "EXIT"}
   ];
@@ -232,8 +299,14 @@ function startMenu(){
       if (menuChoice.menu == "HOMEPAGE"){
         displayHomePage();
       }
+      if (menuChoice.menu == "SORTHOMEPAGE"){
+        getSortedHomepage();
+      }
       if (menuChoice.menu == "SUBREDDIT"){
         displayThisSubreddit();
+      }
+      if (menuChoice.menu == "SORTSUBREDDIT"){
+        getSortedSubreddit();
       }
       if (menuChoice.menu == "SUBREDDITS"){
         dispalySubbredditList();
