@@ -2,10 +2,8 @@ var request = require('request');
 var inquirer = require("inquirer");
 var colors = require("colors");
 const imageToAscii = require("image-to-ascii");
+var wrap = require("word-wrap");
 
-/*
-This function should "return" the default homepage posts as an array of objects
-*/
 
 function requestAsJson (url, callback){
   request(url, function(err, data){
@@ -50,9 +48,6 @@ function getSortedHomepage(sortingMethod, callback) {
   // Check if the sorting method is valid based on the various Reddit sorting methods
 }
 
-/*
-This function should "return" the posts on the front page of a subreddit as an array of objects.
-*/
 function getSubreddit(subreddit, callback) {
   requestAsJson("https://reddit.com/r/"+subreddit+"/.json", function(err, data){
     console.log("https://reddit.com/r/"+subreddit+"/.json");
@@ -80,9 +75,6 @@ function getSortedSubreddit(subreddit, sortingMethod, callback) {
   // Check if the sorting method is valid based on the various Reddit sorting methods
 }
 
-/*
-This function should "return" all the popular subreddits
-*/
 function getSubreddits(callback) {
     request('https://reddit.com/subreddits.json', function(err, res) {
     if (err) {
@@ -98,7 +90,6 @@ function getSubreddits(callback) {
       }
     }
   });
-  // Load reddit.com/subreddits.json and call back with an array of subreddits
 }
 
 function displayThisSubreddit(){
@@ -115,7 +106,7 @@ function displayThisSubreddit(){
         else{
           displayPage(data);
         }
-      })
+      });
   });
 }
 
@@ -123,7 +114,7 @@ function displayPage(data){
   var postToDisplay;
   var listOfPosts = [];
   data.forEach(function(x){
-    listOfPosts.push(x.data.title);
+    listOfPosts.push("Post: "+x.data.title.blue);
   });
   inquirer.prompt({
     type: "list",
@@ -133,20 +124,30 @@ function displayPage(data){
   }).then(
     function(answers){
       postToDisplay = data.find(function(x){
-        return answers.menu == x.data.title;
+        return answers.menu == ("Post: "+x.data.title.blue);
       });
-      // console.log(postToDisplay);
-      console.log("Title:",postToDisplay.data.title);
-      console.log("URL:",postToDisplay.data.url);
-      console.log("Number of Upvotes:",postToDisplay.data.ups);
-      console.log("Number of Comments:",postToDisplay.data.num_comments);
-      var urlTypeArray = postToDisplay.data.url.split(".")
+
+      console.log("\n\nTitle:".bold,postToDisplay.data.title.blue);
+      console.log("Author:".bold,postToDisplay.data.author.red);
+      console.log("URL:".bold,postToDisplay.data.url.yellow.underline);
+      console.log("Number of Upvotes:".bold,postToDisplay.data.ups.toString().green);
+      console.log("Number of Comments:".bold,postToDisplay.data.num_comments.toString().green+"\n\n");
+      var urlTypeArray = postToDisplay.data.url.split(".");
       if ((urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg")){
         picToAscii(postToDisplay.data.url);
       }
-      displayComments(postToDisplay);
-      startMenu();  
-      
+      inquirer.prompt({
+        type:"confirm",
+        name:"yesNo",
+        message:"Would you like to view the comments?"
+      }).then(function(answer){
+        if (answer.yesNo){
+          displayComments(postToDisplay);
+        }
+        else{
+          startMenu();
+        }
+      });
     })
     .catch(function(err){
       console.log(err);
@@ -159,11 +160,10 @@ function picToAscii (url){
 });
 }
 
-
 function displayHomePage(){
   getHomepage(function(err, data){
     if (err){
-      console.log("shit went down")
+      console.log("shit went down");
     }
     else{
       displayPage(data);
@@ -182,10 +182,10 @@ function dispalySubbredditList(){
       info.forEach(function(x){
         subredditArray.push(x.data.display_name);
       });
-      var subredditSorted = subredditArray.sort()
+      var subredditSorted = subredditArray.sort();
       subredditSorted.forEach(function(x){
         var y = x.toUpperCase();
-        subredditMenuChoices.push({"name": y, "value" : x});
+        subredditMenuChoices.push({"name": y.green.underline, "value" : x});
       });
       subredditMenuChoices.push(new inquirer.Separator(), {"name": "Back to Menu", "value": "MENU"}, new inquirer.Separator());
       inquirer.prompt({
@@ -195,7 +195,6 @@ function dispalySubbredditList(){
         choices: subredditMenuChoices
       })
       .then(function(menuChoice) {
-        console.log(menuChoice.subredditMenu);
         if (menuChoice.subredditMenu == "MENU"){
           startMenu();
         }
@@ -214,7 +213,6 @@ function dispalySubbredditList(){
     }
   });
 }
-
 
 function startMenu(){
   var menuChoices = [
@@ -244,17 +242,36 @@ function startMenu(){
   );
 }
 
+function checkForReplies(comment,commentNumber){
+  commentNumber++;
+  if (comment.data.replies){
+    comment.data.replies.data.children.forEach(function(x){
+      var indentAmount = "";
+      for(var i = 0; i <= commentNumber; i++){
+        indentAmount += "    ";
+      }
+      if (x.data.body){
+        console.log(indentAmount,x.data.author.green,":\n", wrap((x.data.body.blue), {indent : indentAmount}),"\n");
+        checkForReplies(x, commentNumber);
+      }
+    });
+    commentNumber--;
+  }
+}
 
 function displayComments(data){
-  console.log("this will one day display comments");
   requestAsJson("https://www.reddit.com/r/"+data.data.subreddit+"/comments/"+ data.data.id + "/.json", function(err, data){
     if(err){
-      console.log("commenting error");
+      console.log("commenting error", err);
     }
     else{
       data.forEach(function(x){
         x.data.children.forEach(function(y){
-          console.log("comment",y.data.body);
+          if (y.data.body){
+            console.log(y.data.author.green,":\n",wrap(y.data.body.blue),"\n");
+            checkForReplies(y,0);
+            console.log("\n");
+          }
         });
       });
     }
