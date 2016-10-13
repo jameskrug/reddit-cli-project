@@ -144,6 +144,7 @@ function displayPage(data){
       if ((urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg")){
         picToAscii(postToDisplay.data.url);
       }
+      displayComments(postToDisplay);
       startMenu();  
       
     })
@@ -241,6 +242,23 @@ function startMenu(){
       }
     }
   );
+}
+
+
+function displayComments(data){
+  console.log("this will one day display comments");
+  requestAsJson("https://www.reddit.com/r/"+data.data.subreddit+"/comments/"+ data.data.id + "/.json", function(err, data){
+    if(err){
+      console.log("commenting error");
+    }
+    else{
+      data.forEach(function(x){
+        x.data.children.forEach(function(y){
+          console.log("comment",y.data.body);
+        });
+      });
+    }
+  });
 }
 
 startMenu();
