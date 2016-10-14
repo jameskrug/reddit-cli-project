@@ -3,9 +3,11 @@ var inquirer = require("inquirer");
 var colors = require("colors");
 const imageToAscii = require("image-to-ascii");
 var wrap = require("word-wrap");
+var thisPageUrl = "";
 
 
 function requestAsJson (url, callback){
+  console.log(url);
   request(url, function(err, data){
     if (err){
       callback(err);
@@ -23,14 +25,14 @@ function requestAsJson (url, callback){
 }
 
 function getHomepage(callback) {
-  // Load reddit.com/.json and call back with the array of posts
-  requestAsJson('https://reddit.com/.json', function(err, data) {
+  thisPageUrl = 'https://reddit.com/.json';
+  requestAsJson(thisPageUrl, function(err, data) {
     if (err) {
       callback(err);
     }
     else {
       try {
-        callback(null, data.data.children); // look at the result and explain why we're returning .data.children
+        callback(null, data.data.children);
       }
       catch(e) {
         callback(e);
@@ -38,7 +40,6 @@ function getHomepage(callback) {
     }
   });
 }
-
 
 function sortByWhat(callback){
   var sortMethods = [
@@ -48,7 +49,7 @@ function sortByWhat(callback){
     {name: "CONTROVERSIAL", value: "controversial"},
     {name: "TOP", value: "top"}
   ];
-
+  
   inquirer.prompt({
     type : "list",
     name : "sortBy",
@@ -57,17 +58,12 @@ function sortByWhat(callback){
   }).then(function(answer){
     callback(answer.sortBy);
   });
-
 }
-/*
-This function should "return" the default homepage posts as an array of objects.
-In contrast to the `getHomepage` function, this one accepts a `sortingMethod` parameter.
-*/
+
 function getSortedHomepage(sortingMethod, callback) {
   sortByWhat(function(x){
-    // console.log(x);
-    requestAsJson('https://reddit.com/'+x+'/.json', function(err, data) {
-      // console.log(data.data.children);
+    thisPageUrl = 'https://reddit.com/'+x+'/.json';
+    requestAsJson(thisPageUrl, function(err, data) {
       if (err) {
         console.log("error:",err);
       }
@@ -81,13 +77,12 @@ function getSortedHomepage(sortingMethod, callback) {
       }
     });
   });
-  // Load reddit.com/{sortingMethod}.json and call back with the array of posts
-  // Check if the sorting method is valid based on the various Reddit sorting methods
 }
 
 function getSubreddit(subreddit, callback) {
-  requestAsJson("https://reddit.com/r/"+subreddit+"/.json", function(err, data){
-    console.log("https://reddit.com/r/"+subreddit+"/.json");
+  thisPageUrl = "https://reddit.com/r/"+subreddit+"/.json";
+  requestAsJson(thisPageUrl, function(err, data){
+    console.log(thisPageUrl);
     if (err){
       callback(err);
     }
@@ -99,20 +94,14 @@ function getSubreddit(subreddit, callback) {
         callback(e);
       }
     }
-  })
-  // Load reddit.com/r/{subreddit}.json and call back with the array of posts
+  });
 }
 
-/*
-This function should "return" the posts on the front page of a subreddit as an array of objects.
-In contrast to the `getSubreddit` function, this one accepts a `sortingMethod` parameter.
-*/
 function getSortedSubreddit(subreddit, sortingMethod, callback) {
   sortByWhat(function(x){
     whichSubreddit(function(subreddit){
-    // console.log(x);
-      requestAsJson('https://reddit.com/r/'+subreddit+"/"+x+'/.json', function(err, data) {
-        // console.log('https://reddit.com/r/'+subreddit+"/"+x+'/.json');
+      thisPageUrl = 'https://reddit.com/r/'+subreddit+"/"+x+'/.json';
+      requestAsJson(thisPageUrl, function(err, data) {
         if (err) {
           console.log("error:",err);
         }
@@ -127,19 +116,18 @@ function getSortedSubreddit(subreddit, sortingMethod, callback) {
       });
     });
   });
-  // Load reddit.com/r/{subreddit}/{sortingMethod}.json and call back with the array of posts
-  // Check if the sorting method is valid based on the various Reddit sorting methods
 }
 
 function getSubreddits(callback) {
-    request('https://reddit.com/subreddits.json', function(err, res) {
+  thisPageUrl = 'https://reddit.com/subreddits.json';
+    request(thisPageUrl, function(err, res) {
     if (err) {
       callback(err);
     }
     else {
       try {
         var response = JSON.parse(res.body);
-        callback(null, response.data.children); // look at the result and explain why we're returning .data.children
+        callback(null, response.data.children);
       }
       catch(e) {
         callback(e);
@@ -147,7 +135,6 @@ function getSubreddits(callback) {
     }
   });
 }
-
 
 function whichSubreddit(callback){
   inquirer.prompt({
@@ -160,19 +147,30 @@ function whichSubreddit(callback){
     });
 }
 
-
 function displayThisSubreddit(){
   whichSubreddit(function(x){
-    requestAsJson("https://www.reddit.com/r/"+x+"/.json", function(err,data){
+    var url = "https://www.reddit.com/r/"+x+"/.json"
+    requestAsJson(url, function(err,data){
       if (err){
         console.log("not working....bitch",err);
       }
       else{
-        displayPage(data.data.children);
+        displayPage(data.data.children, url);
       }
     });
   });
-  // getSubreddit(answer.answer, function(err, data)
+}
+
+function goToNextPage(lastpost){
+  var nextPageUrl = (thisPageUrl +"?after="+lastpost);
+  requestAsJson(nextPageUrl, function(err, data){
+    if (err){
+      console.log("this was a terrible idea");
+    }
+    else{
+      displayPage(data.data.children);
+    }
+  });
 }
 
 function displayPage(data){
@@ -181,6 +179,7 @@ function displayPage(data){
   data.forEach(function(x){
     listOfPosts.push("Post: "+x.data.title.blue);
   });
+  listOfPosts.push(new inquirer.Separator(), "NEXT PAGE".red,new inquirer.Separator());
   inquirer.prompt({
     type: "list",
     name: "menu",
@@ -188,35 +187,45 @@ function displayPage(data){
     choices: listOfPosts
   }).then(
     function(answers){
-      postToDisplay = data.find(function(x){
-        return answers.menu == ("Post: "+x.data.title.blue);
-      });
-
-      console.log("\n\nTitle:".bold,postToDisplay.data.title.blue);
-      console.log("Author:".bold,postToDisplay.data.author.red);
-      console.log("URL:".bold,postToDisplay.data.url.yellow.underline);
-      console.log("Number of Upvotes:".bold,postToDisplay.data.ups.toString().green);
-      console.log("Number of Comments:".bold,postToDisplay.data.num_comments.toString().green+"\n\n");
-      var urlTypeArray = postToDisplay.data.url.split(".");
-      if ((urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg")){
-        picToAscii(postToDisplay.data.url);
-      }
-      inquirer.prompt({
-        type:"confirm",
-        name:"yesNo",
-        message:"Would you like to view the comments?"
-      }).then(function(answer){
-        if (answer.yesNo){
-          displayComments(postToDisplay);
+      if (answers.menu == "NEXT PAGE".red){
+        if (data.length > 24){
+        goToNextPage(data[(data.length)-1].data.name);
         }
         else{
-          startMenu();
+          console.log("no more pages");
         }
-      });
+      }
+      else{
+        postToDisplay = data.find(function(x){
+          return answers.menu == ("Post: "+x.data.title.blue);
+        });
+
+        console.log("\n\nTitle:".bold,postToDisplay.data.title.blue);
+        console.log("Author:".bold,postToDisplay.data.author.red);
+        console.log("URL:".bold,postToDisplay.data.url.yellow.underline);
+        console.log("Number of Upvotes:".bold,postToDisplay.data.ups.toString().green);
+        console.log("Number of Comments:".bold,postToDisplay.data.num_comments.toString().green+"\n\n");
+        var urlTypeArray = postToDisplay.data.url.split(".");
+        if ((urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg")){
+          picToAscii(postToDisplay.data.url);
+        }
+        inquirer.prompt({
+          type:"confirm",
+          name:"yesNo",
+          message:"Would you like to view the comments?"
+        }).then(function(answer){
+          if (answer.yesNo){
+            displayComments(postToDisplay);
+          }
+          else{
+            startMenu();
+          }
+        });
+      }
     })
     .catch(function(err){
       console.log(err);
-    })
+    });
 }
 
 function picToAscii (url){
@@ -226,12 +235,12 @@ function picToAscii (url){
 }
 
 function displayHomePage(){
-  getHomepage(function(err, data){
+  getHomepage(function(err, data,url){
     if (err){
       console.log("shit went down");
     }
     else{
-      displayPage(data);
+      displayPage(data,url);
     }
   });
 }
@@ -324,7 +333,7 @@ function checkForReplies(comment,commentNumber){
         indentAmount += "    ";
       }
       if (x.data.body){
-        console.log(indentAmount,x.data.author.green,":\n", wrap((x.data.body.blue), {indent : indentAmount}),"\n");
+        console.log(indentAmount,x.data.author.green,":\n", wrap((x.data.body.blue), {indent : indentAmount},{newline : "\n"}));
         checkForReplies(x, commentNumber);
       }
     });
@@ -348,6 +357,7 @@ function displayComments(data){
         });
       });
     }
+    startMenu();
   });
 }
 
