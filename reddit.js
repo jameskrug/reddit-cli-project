@@ -4,6 +4,9 @@ var colors = require("colors");
 const imageToAscii = require("image-to-ascii");
 var wrap = require("word-wrap");
 var thisPageUrl = "";
+var ableToGoBack = 0;
+var overAllPage = "";
+var overAllPost = {};
 
 
 function requestAsJson (url, callback){
@@ -26,6 +29,7 @@ function requestAsJson (url, callback){
 
 function getHomepage(callback) {
   thisPageUrl = 'https://reddit.com/.json';
+  overAllPage = thisPageUrl;
   requestAsJson(thisPageUrl, function(err, data) {
     if (err) {
       callback(err);
@@ -63,6 +67,7 @@ function sortByWhat(callback){
 function getSortedHomepage(sortingMethod, callback) {
   sortByWhat(function(x){
     thisPageUrl = 'https://reddit.com/'+x+'/.json';
+    overAllPage = thisPageUrl;
     requestAsJson(thisPageUrl, function(err, data) {
       if (err) {
         console.log("error:",err);
@@ -81,6 +86,7 @@ function getSortedHomepage(sortingMethod, callback) {
 
 function getSubreddit(subreddit, callback) {
   thisPageUrl = "https://reddit.com/r/"+subreddit+"/.json";
+  overAllPage = thisPageUrl;
   requestAsJson(thisPageUrl, function(err, data){
     console.log(thisPageUrl);
     if (err){
@@ -91,7 +97,7 @@ function getSubreddit(subreddit, callback) {
         callback(null, data.data.children);
       }
       catch(e) {
-        callback(e);
+       callback(e);
       }
     }
   });
@@ -101,6 +107,7 @@ function getSortedSubreddit(subreddit, sortingMethod, callback) {
   sortByWhat(function(x){
     whichSubreddit(function(subreddit){
       thisPageUrl = 'https://reddit.com/r/'+subreddit+"/"+x+'/.json';
+      overAllPage = thisPageUrl;
       requestAsJson(thisPageUrl, function(err, data) {
         if (err) {
           console.log("error:",err);
@@ -120,7 +127,8 @@ function getSortedSubreddit(subreddit, sortingMethod, callback) {
 
 function getSubreddits(callback) {
   thisPageUrl = 'https://reddit.com/subreddits.json';
-    request(thisPageUrl, function(err, res) {
+  overAllPage = thisPageUrl;
+  request(thisPageUrl, function(err, res) {
     if (err) {
       callback(err);
     }
@@ -129,8 +137,8 @@ function getSubreddits(callback) {
         var response = JSON.parse(res.body);
         callback(null, response.data.children);
       }
-      catch(e) {
-        callback(e);
+      catch(err){
+         console.log(err);
       }
     }
   });
@@ -149,7 +157,8 @@ function whichSubreddit(callback){
 
 function displayThisSubreddit(){
   whichSubreddit(function(x){
-    var url = "https://www.reddit.com/r/"+x+"/.json"
+    var url = "https://www.reddit.com/r/"+x+"/.json";
+    thisPageUrl = url;
     requestAsJson(url, function(err,data){
       if (err){
         console.log("not working....bitch",err);
@@ -163,6 +172,7 @@ function displayThisSubreddit(){
 
 function goToNextPage(lastpost){
   var nextPageUrl = (thisPageUrl +"?after="+lastpost);
+  overAllPage = nextPageUrl;
   requestAsJson(nextPageUrl, function(err, data){
     if (err){
       console.log("this was a terrible idea");
@@ -173,13 +183,76 @@ function goToNextPage(lastpost){
   });
 }
 
+function goToPreviousPage(firstpost){
+  var previousPageUrl = (thisPageUrl +"?before="+firstpost);
+  overAllPage = previousPageUrl;
+  requestAsJson(previousPageUrl, function(err, data){
+    if (err){
+      console.log("this was a really terrible idea");
+    }
+    else{
+      displayPage(data.data.children);
+    }
+  });
+}
+
+function displayPostInforation(postToDisplay, data){
+  console.log("\n\nTitle:".bold,postToDisplay.data.title.blue);
+  console.log("Author:".bold,postToDisplay.data.author.red);
+  console.log("URL:".bold,postToDisplay.data.url.yellow.underline);
+  console.log("Number of Upvotes:".bold,postToDisplay.data.ups.toString().green);
+  console.log("Number of Comments:".bold,postToDisplay.data.num_comments.toString().green+"\n\n");
+
+  var postMenu = [
+    {name : "Go Back", value : "GOBACK"},
+    {name : "View Comments", value : "COMMENTS"},
+    {name : "Main Menu", value : "MENU"}
+  ];
+  inquirer.prompt({
+    type : "list",
+    name : "postmenu",
+    message : "What would you like to do?",
+    choices : postMenu
+  }).then(function(answer){
+    switch(answer.postmenu){
+      case "GOBACK":
+        displayPage(data);
+        break;
+      case "COMMENTS":
+        displayComments(postToDisplay, data);
+        break;
+      case "MENU":
+        startMenu();
+        break;
+    }
+  });
+}
+
+function displayPost(postToDisplay,data){
+  var urlTypeArray = postToDisplay.data.url.split(".");
+  if ((urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg")){
+    picToAscii(postToDisplay.data.url);
+    setTimeout(function(){
+      displayPostInforation(postToDisplay,data);
+    }, 500);
+  }
+  else{
+    displayPostInforation(postToDisplay,data);
+  }
+}
+
 function displayPage(data){
   var postToDisplay;
   var listOfPosts = [];
+
   data.forEach(function(x){
     listOfPosts.push("Post: "+x.data.title.blue);
   });
-  listOfPosts.push(new inquirer.Separator(), "NEXT PAGE".red,new inquirer.Separator());
+  listOfPosts.push(new inquirer.Separator());
+  if (ableToGoBack > 0){
+    listOfPosts.push("PREVIOUS PAGE".red);
+  }
+  listOfPosts.push("NEXT PAGE".red,new inquirer.Separator());
   inquirer.prompt({
     type: "list",
     name: "menu",
@@ -189,43 +262,27 @@ function displayPage(data){
     function(answers){
       if (answers.menu == "NEXT PAGE".red){
         if (data.length > 24){
-        goToNextPage(data[(data.length)-1].data.name);
-        }
-        else{
-          console.log("no more pages");
+          ableToGoBack++;
+          goToNextPage(data[(data.length)-1].data.name);
         }
       }
+      else if (answers.menu == "PREVIOUS PAGE".red){
+        // console.log("dammit i said previous page");
+        ableToGoBack--;
+        goToPreviousPage(data[0].data.name);
+        }
       else{
         postToDisplay = data.find(function(x){
+          overAllPost = postToDisplay;
           return answers.menu == ("Post: "+x.data.title.blue);
         });
-
-        console.log("\n\nTitle:".bold,postToDisplay.data.title.blue);
-        console.log("Author:".bold,postToDisplay.data.author.red);
-        console.log("URL:".bold,postToDisplay.data.url.yellow.underline);
-        console.log("Number of Upvotes:".bold,postToDisplay.data.ups.toString().green);
-        console.log("Number of Comments:".bold,postToDisplay.data.num_comments.toString().green+"\n\n");
-        var urlTypeArray = postToDisplay.data.url.split(".");
-        if ((urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg") || (urlTypeArray[urlTypeArray.length-1] == "jpg")){
-          picToAscii(postToDisplay.data.url);
-        }
-        inquirer.prompt({
-          type:"confirm",
-          name:"yesNo",
-          message:"Would you like to view the comments?"
-        }).then(function(answer){
-          if (answer.yesNo){
-            displayComments(postToDisplay);
-          }
-          else{
-            startMenu();
-          }
-        });
+        
+        displayPost(postToDisplay, data);
       }
     })
-    .catch(function(err){
-      console.log(err);
-    });
+  .catch(function(err){
+    console.log(err);
+  });
 }
 
 function picToAscii (url){
@@ -303,25 +360,28 @@ function startMenu(){
     name: 'menu',
     message: 'What do you want to do?',
     choices: menuChoices
-  }).then(
-    function(menuChoice) {
-      if (menuChoice.menu == "HOMEPAGE"){
+  }).then(function(menuChoices){
+    switch(menuChoices.menu) {
+      case "HOMEPAGE":
         displayHomePage();
-      }
-      if (menuChoice.menu == "SORTHOMEPAGE"){
+        break;
+      case "SORTHOMEPAGE":
         getSortedHomepage();
-      }
-      if (menuChoice.menu == "SUBREDDIT"){
+        break;
+      case "SUBREDDIT":
         displayThisSubreddit();
-      }
-      if (menuChoice.menu == "SORTSUBREDDIT"){
+        break;
+      case "SORTSUBREDDIT":
         getSortedSubreddit();
-      }
-      if (menuChoice.menu == "SUBREDDITS"){
+        break;
+      case "SUBREDDITS":
         dispalySubbredditList();
-      }
+        break;
+      case "EXIT":
+        console.log("You'll be back.......  they all come back");
+        break;
     }
-  );
+  })
 }
 
 function checkForReplies(comment,commentNumber){
@@ -341,7 +401,47 @@ function checkForReplies(comment,commentNumber){
   }
 }
 
-function displayComments(data){
+function commentsMenu(data, allData){
+  var menuSelections = [
+    {name : "Go Back to Post", value : "goback"},
+    {name : "Back to List", value : "list"},
+    {name : "Main Menu", value : "menu"}
+  ];
+  
+  inquirer.prompt({
+    type: "list",
+    name: "menu",
+    message : "What would you like to do?",
+    choices : menuSelections
+  }).then(function(answer){
+    switch (answer.menu){
+      case "goback":
+        try{
+        console.log("Back to post");
+        displayPostInforation(overAllPost);
+        }
+        catch(e){
+          console.log("errEr",e)
+        }
+        break;
+      case "menu":
+        startMenu();
+        break;
+      case "list":
+        requestAsJson(overAllPage, function(err, data){
+          if (err){
+            console.log("errorsss", err);
+          }
+          else{
+            displayPage(data.data.children);
+          }
+        });
+        break;
+    }
+  });
+}
+
+function displayComments(data, allData){
   requestAsJson("https://www.reddit.com/r/"+data.data.subreddit+"/comments/"+ data.data.id + "/.json", function(err, data){
     if(err){
       console.log("commenting error", err);
@@ -357,14 +457,30 @@ function displayComments(data){
         });
       });
     }
-    startMenu();
+    commentsMenu(data, allData);
   });
 }
 
 startMenu();
 
-
 // Export the API
 module.exports = {
-  // ...
+  requestAsJson: requestAsJson,
+  getHomepage : getHomepage,
+  sortByWhat : sortByWhat,
+  getSortedHomepage : getSortedHomepage,
+  getSubreddit : getSubreddit,
+  getSortedSubreddit : getSortedSubreddit,
+  getSubreddits : getSubreddits,
+  whichSubreddit : whichSubreddit,
+  displayThisSubreddit : displayThisSubreddit,
+  goToNextPage : goToNextPage,
+  goToPreviousPage : goToPreviousPage,
+  displayPage : displayPage,
+  picToAscii : picToAscii,
+  displayHomePage : displayHomePage,
+  displaySubbredditList : dispalySubbredditList,
+  startMenu : startMenu,
+  checkForReplies : checkForReplies,
+  displayComments : displayComments
 };
